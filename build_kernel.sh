@@ -86,13 +86,25 @@ if [ -d "$PATCH_DIR" ]; then
 fi
 
 # ==========================================
-# KernelSU (ReSukiSU)
+# KernelSU (ReSukiSU / BakaSU)
 # ==========================================
+# 为什么必须钉版本：setup.sh 默认跟 main，main 会随上游更新要求更新版 susfs，
+# 而本树自带的 fs/susfs.c 是旧版 -> KernelSU/kernel/tools/susfs_compat.mk 直接 Stop.
+# 已知可用组合：v4.2.0-rc2 (= commit 3576e6a525)，与 pipa 上实测能跑的内核一致。
+KSU_REF="${KSU_REF:-v4.2.0-rc2}"
+
 if [ "$ENABLE_KSU" -eq 1 ]; then
     echo "==========================================="
-    echo " [*] Initializing KernelSU (ReSukiSU)"
+    echo " [*] Initializing KernelSU (ReSukiSU)  ref=$KSU_REF"
     echo "==========================================="
-    curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+    curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s "$KSU_REF"
+
+    KSU_HEAD=$(git -C KernelSU rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
+    echo "[*] KernelSU HEAD: $KSU_HEAD (期望的 $KSU_REF = 3576e6a5)"
+    if [ "$KSU_HEAD" = "unknown" ]; then
+        echo "[!] KernelSU setup 失败（KernelSU/ 不存在）"
+        exit 1
+    fi
     echo "[+] KernelSU setup finished."
 fi
 
@@ -227,11 +239,19 @@ build_target() {
     scripts/config --file "${OUT_DIR}/.config" -e BBG
 
     if [ "$ENABLE_KSU" -eq 1 ]; then
-        echo "[*] Injecting KernelSU & SUSFS configurations..."
-        scripts/config --file "${OUT_DIR}/.config" \
-            -e KSU \
-            -e THREAD_INFO_IN_TASK \
-            -e KSU_SUSFS
+        if [ "${KSU_SUSFS:-1}" -eq 1 ]; then
+            echo "[*] Injecting KernelSU & SUSFS configurations..."
+            scripts/config --file "${OUT_DIR}/.config" \
+                -e KSU \
+                -e THREAD_INFO_IN_TASK \
+                -e KSU_SUSFS
+        else
+            echo "[*] Injecting KernelSU (SUSFS disabled)..."
+            scripts/config --file "${OUT_DIR}/.config" \
+                -e KSU \
+                -e THREAD_INFO_IN_TASK \
+                -d KSU_SUSFS
+        fi
     fi
 
     if [ "$OS_TYPE" == "miui" ]; then
