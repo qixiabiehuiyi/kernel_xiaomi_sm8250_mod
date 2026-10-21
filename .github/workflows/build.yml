@@ -33,7 +33,7 @@ on:
         type: string
         default: 'v4.2.0-rc2'
       susfs:
-        description: '启用 SuSFS（关掉可绕开 susfs 版本冲突）'
+        description: '启用 SuSFS（必须 true：关掉会让 KSU 落到 TP hook 分支，非 GKI 直接报错）'
         required: true
         type: boolean
         default: true
