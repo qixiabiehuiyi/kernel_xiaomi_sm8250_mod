@@ -109,6 +109,35 @@ if [ "$ENABLE_KSU" -eq 1 ]; then
 fi
 
 # ==========================================
+# susfs no_su 兼容垫片
+# ==========================================
+# 背景：KSU rc2 的 setuid 钩子会调用 susfs 的 no_su 系列 API
+#       (susfs_set/clear/is_current_proc_no_su、susfs_set_current_proc_umounted_for_zygote_next)，
+#       而本树自带的 susfs 是 v2.2.0，尚未实现这几个函数 -> vmlinux 链接报 undefined symbol。
+#       这里补成 no-op 垫片：链接通过、行为不变（susfs 这部分“标记进程不可见 su”的
+#       增强在这棵树上不生效，root 与容器功能不受影响）。
+if [ "$ENABLE_KSU" -eq 1 ] && [ "${KSU_SUSFS:-1}" -eq 1 ]; then
+    if grep -q "SUSFS_NO_SU_COMPAT" fs/susfs.c 2>/dev/null; then
+        echo "[*] susfs no_su 垫片已存在，跳过"
+    else
+        cat >> fs/susfs.c <<'SUSFS_SHIM_EOF'
+
+/* SUSFS_NO_SU_COMPAT
+ * KSU >= v4.2.0-rc2 的 hook/setuid_hook.c 会调用下列 API，而本树 susfs v2.2.0 没有实现。
+ * 补成 no-op 以满足链接；susfs 的行为与 v2.2.0 保持一致。
+ */
+#ifdef CONFIG_KSU_SUSFS
+void susfs_set_current_proc_no_su(void) { }
+void susfs_clear_current_proc_no_su(void) { }
+void susfs_set_current_proc_umounted_for_zygote_next(void) { }
+bool susfs_is_current_proc_no_su(void) { return false; }
+#endif
+SUSFS_SHIM_EOF
+        echo "[+] 已向 fs/susfs.c 追加 no_su 兼容垫片"
+    fi
+fi
+
+# ==========================================
 # Baseband-guard（原作者脚本自带，保持不变）
 # ==========================================
 echo "==========================================="
