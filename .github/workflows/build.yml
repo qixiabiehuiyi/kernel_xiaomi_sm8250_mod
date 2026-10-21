@@ -27,6 +27,16 @@ on:
         required: true
         type: boolean
         default: true
+      ksu_ref:
+        description: 'KernelSU 版本（必须钉住；main 已到 rc3，与树内旧 susfs 冲突）'
+        required: true
+        type: string
+        default: 'v4.2.0-rc2'
+      susfs:
+        description: '启用 SuSFS（关掉可绕开 susfs 版本冲突）'
+        required: true
+        type: boolean
+        default: true
       ds:
         description: '启用 Droidspaces 容器支持'
         required: true
@@ -109,13 +119,16 @@ jobs:
           echo "$HOME/zyc-clang/bin" >> "$GITHUB_PATH"
 
       - name: Build
+        env:
+          KSU_REF: ${{ github.event.inputs.ksu_ref }}
+          KSU_SUSFS: ${{ github.event.inputs.susfs == 'true' && '1' || '0' }}
         run: |
           chmod +x build_kernel.sh
           ARGS="${{ github.event.inputs.device }}"
           [ "${{ github.event.inputs.ksu }}" = "true" ] && ARGS="$ARGS ksu"
           [ "${{ github.event.inputs.ds }}" = "true" ] && ARGS="$ARGS ds"
           [ "${{ github.event.inputs.target_os }}" != "both" ] && ARGS="$ARGS ${{ github.event.inputs.target_os }}"
-          echo "==> ./build_kernel.sh $ARGS"
+          echo "==> ./build_kernel.sh $ARGS  (KSU_REF=$KSU_REF KSU_SUSFS=$KSU_SUSFS)"
           ./build_kernel.sh $ARGS | tee build.log
 
       - name: Verify built kernel (droidspaces markers)
